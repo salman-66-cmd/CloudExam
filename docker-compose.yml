@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: cloudexam_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cloudexam_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cloudexam_password_2026}
+      POSTGRES_DB: ${POSTGRES_DB:-cloudexam}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cloudexam_user} -d ${POSTGRES_DB:-cloudexam}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cloudexam_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: cloudexam_redis
+    restart: always
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cloudexam_network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cloudexam_backend
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cloudexam_user}:${POSTGRES_PASSWORD:-cloudexam_password_2026}@db:5432/${POSTGRES_DB:-cloudexam}
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY:-cloudexam_super_secure_enterprise_grade_secret_key_2026_xyz}
+      DEMO_MODE: "true"
+    ports:
+      - "8000:8000"
+    networks:
+      - cloudexam_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: cloudexam_frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    networks:
+      - cloudexam_network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  cloudexam_network:
+    driver: bridge
